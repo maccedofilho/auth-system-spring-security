@@ -3,6 +3,8 @@ package com.macedo.auth.authsystem.service;
 import com.macedo.auth.authsystem.config.JwtProperties;
 import com.macedo.auth.authsystem.dto.*;
 import com.macedo.auth.authsystem.entity.*;
+import com.macedo.auth.authsystem.exception.EmailAlreadyExistsException;
+import com.macedo.auth.authsystem.exception.InvalidCredentialsException;
 import com.macedo.auth.authsystem.repository.RoleRepository;
 import com.macedo.auth.authsystem.repository.UserRepository;
 import com.macedo.auth.authsystem.security.JwtTokenProvider;
@@ -32,7 +34,7 @@ public class AuthService {
     @Transactional
     public void register(RegisterRequest req) {
         if (users.existsByEmail(req.getEmail())) {
-            throw new IllegalArgumentException("Email already in use");
+            throw new EmailAlreadyExistsException("Email already in use");
         }
         Role roleUser = roles.findByName(RoleName.ROLE_USER)
                 .orElseGet(() -> roles.save(Role.builder().name(RoleName.ROLE_USER).build()));
@@ -51,10 +53,10 @@ public class AuthService {
     @Transactional
     public AuthResponse login(LoginRequest req) {
         User u = users.findByEmail(req.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid credentials"));
 
         if (!encoder.matches(req.getPassword(), u.getPassword())) {
-            throw new IllegalArgumentException("Invalid credentials");
+            throw new InvalidCredentialsException("Invalid credentials");
         }
 
         String access = jwt.generateAccessToken(u.getEmail());
