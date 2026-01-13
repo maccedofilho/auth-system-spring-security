@@ -1,5 +1,6 @@
 package com.macedo.auth.authsystem.config;
 
+import com.macedo.auth.authsystem.filter.RateLimitFilter;
 import com.macedo.auth.authsystem.security.JwtAuthenticationEntryPoint;
 import com.macedo.auth.authsystem.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -25,13 +26,16 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint unauthorizedHandler;
     private final JwtAuthenticationFilter jwtFilter;
     private final CorsConfigurationSource corsConfigurationSource;
+    private final RateLimitFilter rateLimitFilter;
 
     public SecurityConfig(JwtAuthenticationEntryPoint unauthorizedHandler,
                           JwtAuthenticationFilter jwtFilter,
-                          CorsConfigurationSource corsConfigurationSource) {
+                          CorsConfigurationSource corsConfigurationSource,
+                          RateLimitFilter rateLimitFilter) {
         this.unauthorizedHandler = unauthorizedHandler;
         this.jwtFilter = jwtFilter;
         this.corsConfigurationSource = corsConfigurationSource;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -58,6 +62,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
