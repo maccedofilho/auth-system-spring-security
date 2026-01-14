@@ -27,4 +27,9 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest req) {
         return ResponseEntity.ok(auth.login(req));
     }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest req) {
+        return ResponseEntity.ok(auth.refresh(req));
+    }
 }

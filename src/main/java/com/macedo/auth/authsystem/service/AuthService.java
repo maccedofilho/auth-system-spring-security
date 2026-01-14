@@ -21,14 +21,17 @@ public class AuthService {
     private final PasswordEncoder encoder;
     private final JwtTokenProvider jwt;
     private final JwtProperties props;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(UserRepository users, RoleRepository roles,
-                       PasswordEncoder encoder, JwtTokenProvider jwt, JwtProperties props) {
+                       PasswordEncoder encoder, JwtTokenProvider jwt, JwtProperties props,
+                       RefreshTokenService refreshTokenService) {
         this.users = users;
         this.roles = roles;
         this.encoder = encoder;
         this.jwt = jwt;
         this.props = props;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -60,10 +63,27 @@ public class AuthService {
         }
 
         String access = jwt.generateAccessToken(u.getEmail());
+        String refreshToken = refreshTokenService.issue(u);
 
         AuthResponse resp = new AuthResponse();
         resp.setAccessToken(access);
+        resp.setRefreshToken(refreshToken);
         resp.setExpiresIn(props.getAccessTokenExpirationMs());
         return resp;
+    }
+
+    @Transactional
+    public RefreshResponse refresh(RefreshRequest req) {
+        var rt = refreshTokenService.validateAndGetRefreshToken(req.getRefreshToken());
+
+        String newAccessToken = jwt.generateAccessToken(rt.getUser().getEmail());
+        String newRefreshToken = refreshTokenService.refresh(req.getRefreshToken());
+
+        return RefreshResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .tokenType("Bearer")
+                .expiresIn(props.getAccessTokenExpirationMs())
+                .build();
     }
 }
