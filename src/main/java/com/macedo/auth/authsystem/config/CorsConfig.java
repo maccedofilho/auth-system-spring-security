@@ -25,6 +25,20 @@ public class CorsConfig {
             "OPTIONS"
     );
 
+    private static final List<String> ALLOWED_HEADERS = Arrays.asList(
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin",
+            "Access-Control-Request-Method",
+            "Access-Control-Request-Headers"
+    );
+
+    private static final List<String> EXPOSED_HEADERS = Arrays.asList(
+            "Authorization",
+            "Content-Type"
+    );
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
@@ -33,14 +47,11 @@ public class CorsConfig {
 
         configuration.setAllowedMethods(ALLOWED_METHODS);
 
-        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowedHeaders(ALLOWED_HEADERS);
 
         configuration.setAllowCredentials(true);
 
-        configuration.setExposedHeaders(Arrays.asList(
-                "Authorization",
-                "Content-Type"
-        ));
+        configuration.setExposedHeaders(EXPOSED_HEADERS);
 
         configuration.setMaxAge(3600L);
 

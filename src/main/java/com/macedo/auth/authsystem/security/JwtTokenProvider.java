@@ -56,10 +56,30 @@ public class JwtTokenProvider {
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parserBuilder()
+            Claims claims = Jwts.parserBuilder()
                     .setSigningKey(key)
                     .build()
-                    .parseClaimsJws(token);
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            Date issuedAt = claims.getIssuedAt();
+            Date now = new Date();
+            if (issuedAt != null && issuedAt.after(now)) {
+                log.error("Token issuedAt date is in the future");
+                return false;
+            }
+
+            Date expiration = claims.getExpiration();
+            if (expiration != null && expiration.before(now)) {
+                log.error("Token expiration time is in the past");
+                return false;
+            }
+
+            if (claims.getSubject() == null || claims.getSubject().isBlank()) {
+                log.error("Token subject is missing or empty");
+                return false;
+            }
+
             return true;
         } catch (ExpiredJwtException ex) {
             log.error("Expired token: {}", ex.getMessage());
@@ -71,6 +91,8 @@ public class JwtTokenProvider {
             log.error("JWT token signing failed: {}", ex.getMessage());
         } catch (IllegalArgumentException ex) {
             log.error("Illegal argument when validating JWT token: {}", ex.getMessage());
+        } catch (Exception ex) {
+            log.error("Unexpected error validating JWT token: {}", ex.getMessage());
         }
         return false;
     }

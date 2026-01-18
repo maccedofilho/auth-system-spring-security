@@ -10,6 +10,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -21,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
+@Slf4j
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
@@ -48,6 +50,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return buckets.get(key, k -> createNewBucket(capacity, durationMinutes));
     }
 
+    private String getClientIdentifier(HttpServletRequest request) {
+        String ip = getClientIp(request);
+        String userAgent = request.getHeader("User-Agent");
+
+        if (userAgent == null || userAgent.isEmpty() || userAgent.length() > 255) {
+            userAgent = "unknown";
+        }
+
+        return ip + ":" + userAgent.hashCode();
+    }
+
     private String getClientIp(HttpServletRequest request) {
         String xfHeader = request.getHeader("X-Forwarded-For");
         if (xfHeader == null || xfHeader.isEmpty()) {
@@ -66,7 +79,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         response.setStatus(429);
         response.setContentType("application/json");
+        response.setHeader("X-RateLimit-Limit", "5");
+        response.setHeader("Retry-After", "60");
         response.getWriter().write(objectMapper.writeValueAsString(error));
+
+        log.warn("Rate limit exceeded for path: {}", path);
     }
 
     @Override
@@ -81,26 +98,43 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
+        boolean rateLimited = false;
+
         if (path.startsWith("/api/auth/login")) {
-            String ip = getClientIp(request);
-            Bucket bucket = getBucket("login:" + ip, 5, 1);
+            String clientIdentifier = getClientIdentifier(request);
+            Bucket bucket = getBucket("login:" + clientIdentifier, 5, 1);
 
             if (!bucket.tryConsume(1)) {
                 writeRateLimitResponse(response, path);
-                return;
+                rateLimited = true;
+                log.warn("Login rate limit exceeded for client: {}", clientIdentifier);
             }
         }
 
-        if (path.startsWith("/api/auth/register")) {
-            String ip = getClientIp(request);
-            Bucket bucket = getBucket("register:" + ip, 3, 1);
+        if (!rateLimited && path.startsWith("/api/auth/register")) {
+            String clientIdentifier = getClientIdentifier(request);
+            Bucket bucket = getBucket("register:" + clientIdentifier, 3, 1);
 
             if (!bucket.tryConsume(1)) {
                 writeRateLimitResponse(response, path);
-                return;
+                rateLimited = true;
+                log.warn("Registration rate limit exceeded for client: {}", clientIdentifier);
             }
         }
 
-        filterChain.doFilter(request, response);
+        if (!rateLimited && path.startsWith("/api/auth/refresh")) {
+            String clientIdentifier = getClientIdentifier(request);
+            Bucket bucket = getBucket("refresh:" + clientIdentifier, 10, 1);
+
+            if (!bucket.tryConsume(1)) {
+                writeRateLimitResponse(response, path);
+                rateLimited = true;
+                log.warn("Refresh token rate limit exceeded for client: {}", clientIdentifier);
+            }
+        }
+
+        if (!rateLimited) {
+            filterChain.doFilter(request, response);
+        }
     }
 }
