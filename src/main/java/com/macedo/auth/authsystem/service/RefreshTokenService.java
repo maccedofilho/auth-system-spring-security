@@ -1,6 +1,7 @@
 package com.macedo.auth.authsystem.service;
 
 import com.macedo.auth.authsystem.config.JwtProperties;
+import com.macedo.auth.authsystem.dto.SessionResponse;
 import com.macedo.auth.authsystem.entity.RefreshToken;
 import com.macedo.auth.authsystem.entity.User;
 import com.macedo.auth.authsystem.exception.TokenRefreshException;
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -55,11 +57,14 @@ public class RefreshTokenService {
         repo.deleteByUser(user);
         var token = UUID.randomUUID().toString();
         var hashedToken = hashToken(token);
+        var now = Instant.now();
         var rt = RefreshToken.builder()
                 .user(user)
                 .token(hashedToken)
-                .expiryDate(Instant.now().plusMillis(props.getRefreshTokenExpirationMs()))
+                .expiryDate(now.plusMillis(props.getRefreshTokenExpirationMs()))
                 .revoked(false)
+                .createdAt(now)
+                .lastUsedAt(now)
                 .build();
         repo.save(rt);
         return token;
@@ -88,11 +93,17 @@ public class RefreshTokenService {
 
         var newToken = UUID.randomUUID().toString();
         var hashedNewToken = hashToken(newToken);
+        var now = Instant.now();
         var rt = RefreshToken.builder()
                 .user(oldRt.getUser())
                 .token(hashedNewToken)
-                .expiryDate(Instant.now().plusMillis(props.getRefreshTokenExpirationMs()))
+                .expiryDate(now.plusMillis(props.getRefreshTokenExpirationMs()))
                 .revoked(false)
+                .deviceName(oldRt.getDeviceName())
+                .ip(oldRt.getIp())
+                .userAgent(oldRt.getUserAgent())
+                .createdAt(now)
+                .lastUsedAt(now)
                 .build();
         repo.save(rt);
         return newToken;
@@ -108,5 +119,23 @@ public class RefreshTokenService {
         var rt = validateAndGetRefreshToken(refreshToken);
         rt.setRevoked(true);
         repo.save(rt);
+    }
+
+    public List<SessionResponse> getSessionsByUser(User user, String currentToken) {
+        var tokens = repo.findByUserAndRevokedFalseOrderByCreatedAtDesc(user);
+        String currentHashedToken = currentToken != null ? hashToken(currentToken) : null;
+
+        return tokens.stream()
+                .map(rt -> SessionResponse.builder()
+                        .sessionId(rt.getId())
+                        .deviceName(rt.getDeviceName())
+                        .ip(rt.getIp())
+                        .userAgent(rt.getUserAgent())
+                        .createdAt(rt.getCreatedAt())
+                        .lastUsedAt(rt.getLastUsedAt())
+                        .isCurrent(currentHashedToken != null && currentHashedToken.equals(rt.getToken()))
+                        .expiresAt(rt.getExpiryDate())
+                        .build())
+                .toList();
     }
 }

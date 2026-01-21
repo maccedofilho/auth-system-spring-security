@@ -7,9 +7,11 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -205,6 +207,41 @@ public class AuthController {
     })
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest req) {
         auth.logout(req);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/logout-all")
+    @Operation(
+            summary = "Logout global - revoga todas as sessões",
+            description = """
+                    Revoga todos os refresh tokens do usuário autenticado, encerrando todas as sessões ativas.
+
+                    **Comportamento:**
+                    * Todos os refresh tokens do usuário são deletados do banco de dados
+                    * Após o logout global, nenhum dispositivo pode obter novos access tokens
+                    * Access tokens ainda válidos continuarão funcionando até expirarem (15 min)
+                    * Operação é idempotente - chamadas repetidas não geram erro
+
+                    **Casos de Uso:**
+                    * Suspeita de conta comprometida
+                    * Troca de senha ou dispositivo
+                    * Limpeza de sessões antigas
+                    """
+    )
+    @SecurityRequirement(name = "Bearer Authentication")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Logout global realizado - todas as sessões foram encerradas"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Não autenticado - token ausente, inválido ou expirado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public ResponseEntity<Void> logoutAll(Authentication authentication) {
+        auth.logoutAll(authentication.getName());
         return ResponseEntity.noContent().build();
     }
 }

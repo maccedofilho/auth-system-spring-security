@@ -16,6 +16,11 @@ public class UserService {
 
     private final UserRepository userRepository;
 
+    public User findByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("User not found: " + email));
+    }
+
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
                 .map(this::toResponse)

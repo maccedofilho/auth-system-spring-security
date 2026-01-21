@@ -91,4 +91,11 @@ public class AuthService {
     public void logout(RefreshRequest req) {
         refreshTokenService.revoke(req.getRefreshToken());
     }
+
+    @Transactional
+    public void logoutAll(String email) {
+        User user = users.findByEmail(email)
+                .orElseThrow(() -> new InvalidCredentialsException("User not found"));
+        refreshTokenService.revokeAll(user);
+    }
 }

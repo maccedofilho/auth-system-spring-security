@@ -28,4 +28,19 @@ public class RefreshToken {
     @Column(nullable = false)
     private boolean revoked;
 
+    @Column(length = 255)
+    private String deviceName;
+
+    @Column(length = 45)
+    private String ip;
+
+    @Column(length = 500)
+    private String userAgent;
+
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column
+    private Instant lastUsedAt;
+
 }
