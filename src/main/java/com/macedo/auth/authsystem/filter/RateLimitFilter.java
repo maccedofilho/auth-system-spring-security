@@ -5,19 +5,25 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.macedo.auth.authsystem.dto.ErrorResponse;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.Refill;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -38,16 +44,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.objectMapper.registerModule(new JavaTimeModule());
     }
 
-    private Bucket createNewBucket(int capacity, int durationMinutes) {
-        Refill refill = Refill.intervally(capacity, Duration.ofMinutes(durationMinutes));
-        Bandwidth limit = Bandwidth.classic(capacity, refill);
+    private record RateLimitConfig(String endpoint, int capacity, int durationMinutes) implements Serializable {
+    }
+
+    private static final RateLimitConfig LOGIN_LIMIT = new RateLimitConfig("/api/auth/login", 5, 1);
+    private static final RateLimitConfig REGISTER_LIMIT = new RateLimitConfig("/api/auth/register", 3, 1);
+    private static final RateLimitConfig REFRESH_LIMIT = new RateLimitConfig("/api/auth/refresh", 10, 1);
+
+    private Bucket createNewBucket(RateLimitConfig config) {
+        Refill refill = Refill.intervally(config.capacity, Duration.ofMinutes(config.durationMinutes));
+        Bandwidth limit = Bandwidth.classic(config.capacity, refill);
         return Bucket.builder()
                 .addLimit(limit)
                 .build();
     }
 
-    private Bucket getBucket(String key, int capacity, int durationMinutes) {
-        return buckets.get(key, k -> createNewBucket(capacity, durationMinutes));
+    private Bucket getBucket(String key, RateLimitConfig config) {
+        return buckets.get(key, k -> createNewBucket(config));
     }
 
     private String getClientIdentifier(HttpServletRequest request) {
@@ -69,21 +82,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return xfHeader.split(",")[0].trim();
     }
 
-    private void writeRateLimitResponse(HttpServletResponse response, String path) throws IOException {
+    private void writeRateLimitResponse(HttpServletResponse response, String path, long retryAfterSeconds) throws IOException {
         ErrorResponse error = ErrorResponse.builder()
                 .code("RATE_LIMIT_EXCEEDED")
-                .message("Too many requests, try again later")
+                .message("Too many requests. Please try again in " + retryAfterSeconds + " seconds.")
                 .timestamp(Instant.now())
                 .path(path)
                 .build();
 
-        response.setStatus(429);
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType("application/json");
-        response.setHeader("X-RateLimit-Limit", "5");
-        response.setHeader("Retry-After", "60");
+        response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
         response.getWriter().write(objectMapper.writeValueAsString(error));
 
-        log.warn("Rate limit exceeded for path: {}", path);
+        log.warn("Rate limit exceeded for path: {}, retry after: {}s", path, retryAfterSeconds);
     }
 
     @Override
@@ -100,41 +112,49 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         boolean rateLimited = false;
 
-        if (path.startsWith("/api/auth/login")) {
-            String clientIdentifier = getClientIdentifier(request);
-            Bucket bucket = getBucket("login:" + clientIdentifier, 5, 1);
-
-            if (!bucket.tryConsume(1)) {
-                writeRateLimitResponse(response, path);
-                rateLimited = true;
-                log.warn("Login rate limit exceeded for client: {}", clientIdentifier);
-            }
+        // verifica rate limit para login / check rate limit for login
+        if (path.startsWith(LOGIN_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, LOGIN_LIMIT);
         }
 
-        if (!rateLimited && path.startsWith("/api/auth/register")) {
-            String clientIdentifier = getClientIdentifier(request);
-            Bucket bucket = getBucket("register:" + clientIdentifier, 3, 1);
-
-            if (!bucket.tryConsume(1)) {
-                writeRateLimitResponse(response, path);
-                rateLimited = true;
-                log.warn("Registration rate limit exceeded for client: {}", clientIdentifier);
-            }
+        // verifica rate limit para register / check rate limit for register
+        if (!rateLimited && path.startsWith(REGISTER_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, REGISTER_LIMIT);
         }
 
-        if (!rateLimited && path.startsWith("/api/auth/refresh")) {
-            String clientIdentifier = getClientIdentifier(request);
-            Bucket bucket = getBucket("refresh:" + clientIdentifier, 10, 1);
-
-            if (!bucket.tryConsume(1)) {
-                writeRateLimitResponse(response, path);
-                rateLimited = true;
-                log.warn("Refresh token rate limit exceeded for client: {}", clientIdentifier);
-            }
+        // verifica rate limit para refresh / check rate limit for refresh
+        if (!rateLimited && path.startsWith(REFRESH_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, REFRESH_LIMIT);
         }
 
         if (!rateLimited) {
             filterChain.doFilter(request, response);
+        }
+    }
+
+    private boolean checkRateLimit(HttpServletRequest request, HttpServletResponse response,
+                                   String path, RateLimitConfig config) throws IOException {
+        String clientIdentifier = getClientIdentifier(request);
+        String bucketKey = config.endpoint().substring(config.endpoint().lastIndexOf('/')) + ":" + clientIdentifier;
+        Bucket bucket = getBucket(bucketKey, config);
+
+        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+        if (probe.isConsumed()) {
+            response.setHeader("X-RateLimit-Limit", String.valueOf(config.capacity()));
+            response.setHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
+            response.setHeader("X-RateLimit-Reset", String.valueOf(probe.getNanosToWaitForRefill() / 1_000_000_000));
+            return false;
+
+        } else {
+            long retryAfterSeconds = probe.getNanosToWaitForRefill() / 1_000_000_000;
+            response.setHeader("X-RateLimit-Limit", String.valueOf(config.capacity()));
+            response.setHeader("X-RateLimit-Remaining", "0");
+            response.setHeader("X-RateLimit-Reset", String.valueOf(retryAfterSeconds));
+
+            writeRateLimitResponse(response, path, retryAfterSeconds);
+            log.warn("Rate limit exceeded for path: {} by client: {}", path, clientIdentifier);
+            return true;
         }
     }
 }

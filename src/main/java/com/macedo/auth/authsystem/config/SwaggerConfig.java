@@ -5,9 +5,13 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,61 +25,66 @@ public class SwaggerConfig {
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
-                // Informações gerais da API
                 .info(new Info()
                         .title("Auth System API")
                         .version("1.0.0")
                         .description("""
-                                ### Sistema de Autenticação JWT com Spring Security
+                                ## Sistema de Autenticação JWT com Spring Security
 
-                                API completa para autenticação e autorização utilizando JWT (JSON Web Tokens).
+                                API completa para autenticação e gerenciamento de usuários com tokens JWT.
 
-                                ## Funcionalidades Principais
+                                ### Funcionalidades Principais
+                                - **Autenticação JWT**: Access tokens de curta duração (15 min)
+                                - **Refresh Tokens**: Tokens de renovação com rotação automática (7 dias)
+                                - **Rate Limiting**: Proteção contra ataques de força bruta
+                                - **Role-Based Access Control**: RBAC com ROLE_USER e ROLE_ADMIN
 
-                                * **Registro de Usuários**: Crie novas contas com email e senha
-                                * **Login**: Autentique-se e receba tokens de acesso
-                                * **Refresh Token**: Renove seu token de acesso sem fazer login novamente
-                                * **Perfil de Usuário**: Acesse informações do seu perfil
-                                * **Administração**: Endpoints exclusivos para administradores
+                                ### Como Usar
 
-                                ## Segurança
+                                1. **Registrar**: `POST /api/auth/register` - Crie uma conta
+                                2. **Login**: `POST /api/auth/login` - Obtenha seus tokens
+                                3. **Access Token**: Use no header `Authorization: Bearer {token}`
+                                4. **Refresh Token**: `POST /api/auth/refresh` - Renove o access token expirado
 
-                                * Tokens JWT com assinatura HS512
-                                * Refresh tokens armazenados de forma segura (hash)
-                                * Rate limiting em endpoints críticos
-                                * Validação robusta de entrada
-                                * Proteção contra ataques comuns (CSRF, XSS, etc.)
+                                ### Rate Limiting
 
-                                ## Autenticação
+                                | Endpoint | Limite | Período |
+                                |----------|--------|---------|
+                                | /api/auth/login | 5 | 1 minuto |
+                                | /api/auth/register | 3 | 1 minuto |
+                                | /api/auth/refresh | 10 | 1 minuto |
 
-                                Para acessar endpoints protegidos, inclua o token no header Authorization:
-                                ```
-                                Authorization: Bearer <seu_token_aqui>
-                                ```
+                                ### Códigos de Erro
+
+                                | Código | Descrição |
+                                |--------|-----------|
+                                | 400 | Bad Request - Dados inválidos |
+                                | 401 | Unauthorized - Não autenticado |
+                                | 403 | Forbidden - Sem permissão |
+                                | 404 | Not Found - Recurso não encontrado |
+                                | 409 | Conflict - Email já existe |
+                                | 429 | Too Many Requests - Rate limit excedido |
+                                | 500 | Internal Server Error - Erro no servidor |
                                 """)
                         .contact(new Contact()
-                                .name("Equipe de Desenvolvimento")
-                                .email("dev@company.com")
-                                .url("https://github.com/yourrepo/auth-system"))
+                                .name("Auth System Team")
+                                .email("contact@authsystem.com")
+                                .url("https://github.com/macedo/auth-system"))
                         .license(new License()
-                                .name("Apache 2.0")
-                                .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
-
-                // Servidores
+                                .name("MIT License")
+                                .url("https://opensource.org/licenses/MIT")))
                 .servers(List.of(
                         new Server()
                                 .url("http://localhost:8080")
                                 .description("Servidor de Desenvolvimento"),
                         new Server()
-                                .url("https://api.yourdomain.com")
+                                .url("https://staging-api.authsystem.com")
+                                .description("Servidor de Staging"),
+                        new Server()
+                                .url("https://api.authsystem.com")
                                 .description("Servidor de Produção")
                 ))
-
-                // Requisito de segurança global
-                .addSecurityItem(new SecurityRequirement()
-                        .addList(SECURITY_SCHEME_NAME))
-
-                // Componentes - Schemes de segurança
+                .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME,
                                 new SecurityScheme()
@@ -84,19 +93,12 @@ public class SwaggerConfig {
                                         .scheme("bearer")
                                         .bearerFormat("JWT")
                                         .description("""
-                                                Autenticação JWT usando tokens Bearer.
+                                                Insira o token JWT obtido no endpoint `/api/auth/login`.
 
-                                                **Como obter o token:**
-                                                1. Faça login via `POST /api/auth/login`
-                                                2. Copie o `accessToken` da resposta
-                                                3. Cole no campo acima (sem o prefixo 'Bearer')
+                                                Formato: `Bearer eyJhbGciOiJIUzUxMiJ9...`
 
-                                                **Exemplo:**
-                                                ```
-                                                eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ1c2VyQGV4YW1wbGUuY29tIiw...
-                                                ```
-
-                                                **Nota:** O token expira em 15 minutos. Use o endpoint de refresh para renová-lo.
-                                                """)));
+                                                O access token expira em 15 minutos. Use o refresh token para obter um novo access token.
+                                                """))
+                );
     }
 }
