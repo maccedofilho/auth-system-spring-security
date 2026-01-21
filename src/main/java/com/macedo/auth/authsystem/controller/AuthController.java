@@ -244,4 +244,61 @@ public class AuthController {
         auth.logoutAll(authentication.getName());
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/change-password")
+    @Operation(
+            summary = "Alterar senha do usuário autenticado",
+            description = """
+                    Altera a senha do usuário autenticado após validar a senha atual.
+
+                    **Comportamento:**
+                    * Valida a senha atual fornecida
+                    * Atualiza para a nova senha (armazenada com hash BCrypt)
+                    * Revoga todos os refresh tokens do usuário (encerra todas as sessões)
+                    * Usuário deve fazer login novamente após a troca
+
+                    **Requisitos da Nova Senha:**
+                    * Mínimo 8 caracteres
+                    * Máximo 100 caracteres
+                    * Deve ser diferente da senha atual
+
+                    **Após a Troca:**
+                    * Todos os dispositivos são desconectados
+                    * Access tokens ainda válidos continuarão funcionando até expirarem (15 min)
+                    * Login necessário com a nova senha
+
+                    **Segurança:**
+                    * Rate limit: 3 tentativas por minuto por usuário
+                    * Log de auditoria registrado para cada troca
+                    """
+    )
+    @SecurityRequirement(name = "Bearer Authentication")
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Senha alterada com sucesso - todas as sessões foram encerradas"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Dados inválidos ou nova senha igual à atual",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Não autenticado ou senha atual incorreta",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "429",
+                    description = "Muitas tentativas de troca de senha (rate limit)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public ResponseEntity<Void> changePassword(
+            @Valid @RequestBody ChangePasswordRequest req,
+            Authentication authentication
+    ) {
+        auth.changePassword(authentication.getName(), req);
+        return ResponseEntity.noContent().build();
+    }
 }

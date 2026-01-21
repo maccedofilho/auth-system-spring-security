@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -119,5 +120,57 @@ public class UserController {
     ) {
         var user = userService.findByEmail(auth.getName());
         return refreshTokenService.getSessionsByUser(user, refreshToken);
+    }
+
+    @DeleteMapping("/sessions/{sessionId}")
+    @Operation(
+            summary = "Revogar sessão específica",
+            description = """
+                    Revoga uma sessão específica do usuário autenticado.
+
+                    **Comportamento:**
+                    * Apenas a sessão especificada é revogada
+                    * Outras sessões do usuário permanecem ativas
+                    * Operação é idempotente - chamadas repetidas para mesma sessão não geram erro
+                    * Sessão revogada não pode mais obter novos access tokens
+
+                    **Segurança:**
+                    * Só é possível revogar sessões do próprio usuário autenticado
+                    * Tentativa de revogar sessão de outro usuário retorna 404
+
+                    **Casos de Uso:**
+                    * Identificou sessão suspeita em outro dispositivo
+                    * Saiu de um dispositivo específico
+                    * Controle fino de sessões ativas
+                    """
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Sessão revogada com sucesso"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Não autenticado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Sessão não encontrada ou não pertence ao usuário",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public ResponseEntity<Void> revokeSession(
+            @Parameter(
+                    description = "ID da sessão a ser revogada",
+                    required = true,
+                    example = "123"
+            )
+            @PathVariable Long sessionId,
+            Authentication auth
+    ) {
+        var user = userService.findByEmail(auth.getName());
+        refreshTokenService.revokeSessionById(sessionId, user);
+        return ResponseEntity.noContent().build();
     }
 }

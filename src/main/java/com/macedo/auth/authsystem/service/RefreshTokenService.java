@@ -7,6 +7,7 @@ import com.macedo.auth.authsystem.entity.User;
 import com.macedo.auth.authsystem.exception.TokenRefreshException;
 import com.macedo.auth.authsystem.repository.RefreshTokenRepository;
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class RefreshTokenService {
 
@@ -137,5 +139,22 @@ public class RefreshTokenService {
                         .expiresAt(rt.getExpiryDate())
                         .build())
                 .toList();
+    }
+
+    @Transactional
+    public void revokeSessionById(Long sessionId, User user) {
+        var rt = repo.findByIdAndUser(sessionId, user)
+                .orElseThrow(() -> new com.macedo.auth.authsystem.exception.ResourceNotFoundException(
+                        "Session not found or does not belong to user"));
+
+        if (rt.isRevoked()) {
+            log.info("Session {} already revoked for user {}", sessionId, user.getEmail());
+            return;
+        }
+
+        rt.setRevoked(true);
+        repo.save(rt);
+        log.info("Session {} revoked for user {} - Device: {}, IP: {}",
+                sessionId, user.getEmail(), rt.getDeviceName(), rt.getIp());
     }
 }

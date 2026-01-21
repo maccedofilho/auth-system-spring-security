@@ -3,6 +3,7 @@ package com.macedo.auth.authsystem.service;
 import com.macedo.auth.authsystem.config.JwtProperties;
 import com.macedo.auth.authsystem.entity.RefreshToken;
 import com.macedo.auth.authsystem.entity.User;
+import com.macedo.auth.authsystem.exception.ResourceNotFoundException;
 import com.macedo.auth.authsystem.exception.TokenRefreshException;
 import com.macedo.auth.authsystem.repository.RefreshTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -145,5 +146,76 @@ class RefreshTokenServiceTest {
         assertNotEquals(oldToken, newToken);
         assertTrue(oldRt.isRevoked());
         verify(repo, times(2)).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void whenRevokeSessionById_withValidSession_thenRevokesSession() {
+        Long sessionId = 123L;
+        User user = User.builder().id(1L).email("test@example.com").build();
+        RefreshToken rt = RefreshToken.builder()
+                .id(sessionId)
+                .user(user)
+                .token("hashed-token")
+                .deviceName("Chrome on Windows")
+                .ip("192.168.1.100")
+                .revoked(false)
+                .build();
+
+        when(repo.findByIdAndUser(sessionId, user)).thenReturn(Optional.of(rt));
+        when(repo.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        refreshTokenService.revokeSessionById(sessionId, user);
+
+        assertTrue(rt.isRevoked());
+        verify(repo).save(rt);
+    }
+
+    @Test
+    void whenRevokeSessionById_withNonExistentSession_thenThrowsNotFoundException() {
+        Long sessionId = 999L;
+        User user = User.builder().id(1L).email("test@example.com").build();
+
+        when(repo.findByIdAndUser(sessionId, user)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> {
+            refreshTokenService.revokeSessionById(sessionId, user);
+        });
+    }
+
+    @Test
+    void whenRevokeSessionById_withAlreadyRevokedSession_thenIdempotent() {
+        Long sessionId = 123L;
+        User user = User.builder().id(1L).email("test@example.com").build();
+        RefreshToken rt = RefreshToken.builder()
+                .id(sessionId)
+                .user(user)
+                .token("hashed-token")
+                .revoked(true)
+                .build();
+
+        when(repo.findByIdAndUser(sessionId, user)).thenReturn(Optional.of(rt));
+
+        assertDoesNotThrow(() -> refreshTokenService.revokeSessionById(sessionId, user));
+        verify(repo, never()).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void whenRevokeSessionById_withDifferentUser_thenThrowsNotFoundException() {
+        Long sessionId = 123L;
+        User owner = User.builder().id(1L).email("owner@example.com").build();
+        User requester = User.builder().id(2L).email("requester@example.com").build();
+        RefreshToken rt = RefreshToken.builder()
+                .id(sessionId)
+                .user(owner)
+                .token("hashed-token")
+                .revoked(false)
+                .build();
+
+        when(repo.findByIdAndUser(sessionId, requester)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> {
+            refreshTokenService.revokeSessionById(sessionId, requester);
+        });
+        verify(repo, never()).save(any(RefreshToken.class));
     }
 }

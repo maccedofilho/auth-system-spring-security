@@ -50,6 +50,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitConfig LOGIN_LIMIT = new RateLimitConfig("/api/auth/login", 5, 1);
     private static final RateLimitConfig REGISTER_LIMIT = new RateLimitConfig("/api/auth/register", 3, 1);
     private static final RateLimitConfig REFRESH_LIMIT = new RateLimitConfig("/api/auth/refresh", 10, 1);
+    private static final RateLimitConfig CHANGE_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/change-password", 3, 1);
 
     private Bucket createNewBucket(RateLimitConfig config) {
         Refill refill = Refill.intervally(config.capacity, Duration.ofMinutes(config.durationMinutes));
@@ -125,6 +126,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // verifica rate limit para refresh / check rate limit for refresh
         if (!rateLimited && path.startsWith(REFRESH_LIMIT.endpoint())) {
             rateLimited = checkRateLimit(request, response, path, REFRESH_LIMIT);
+        }
+
+        // verifica rate limit para change-password / check rate limit for change-password
+        if (!rateLimited && path.startsWith(CHANGE_PASSWORD_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, CHANGE_PASSWORD_LIMIT);
         }
 
         if (!rateLimited) {
