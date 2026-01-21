@@ -169,4 +169,42 @@ public class AuthController {
     public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest req) {
         return ResponseEntity.ok(auth.refresh(req));
     }
+
+    @PostMapping("/logout")
+    @Operation(
+            summary = "Logout do usuário",
+            description = """
+                    Revoga o refresh token, efetuando o logout do usuário.
+
+                    **Comportamento:**
+                    * O refresh token fornecido é marcado como revogado no banco de dados
+                    * Após revogado, o token não pode mais ser usado para obter novos access tokens
+                    * Access tokens ainda válidos continuarão funcionando até sua expiração natural (15 min)
+
+                    **Nota sobre Segurança:**
+                    * O access token de curta duração (15 min) ainda funcionará após o logout
+                    * Para invalidar imediatamente todos os tokens, seria necessário implementar um blacklist
+                    * Esta abordagem é simples e suficiente para a maioria dos casos de uso
+                    """
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "204",
+                    description = "Logout realizado com sucesso - refresh token revogado"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Dados de entrada inválidos",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Refresh token inválido, expirado ou já revogado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest req) {
+        auth.logout(req);
+        return ResponseEntity.noContent().build();
+    }
 }

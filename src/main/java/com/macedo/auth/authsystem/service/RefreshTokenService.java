@@ -102,4 +102,11 @@ public class RefreshTokenService {
     public void revokeAll(User user) {
         repo.deleteByUser(user);
     }
+
+    @Transactional
+    public void revoke(String refreshToken) {
+        var rt = validateAndGetRefreshToken(refreshToken);
+        rt.setRevoked(true);
+        repo.save(rt);
+    }
 }

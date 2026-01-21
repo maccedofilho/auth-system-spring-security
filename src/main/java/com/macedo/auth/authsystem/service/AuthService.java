@@ -86,4 +86,9 @@ public class AuthService {
                 .expiresIn(props.getAccessTokenExpirationMs())
                 .build();
     }
+
+    @Transactional
+    public void logout(RefreshRequest req) {
+        refreshTokenService.revoke(req.getRefreshToken());
+    }
 }
