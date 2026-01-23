@@ -51,6 +51,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitConfig REGISTER_LIMIT = new RateLimitConfig("/api/auth/register", 3, 1);
     private static final RateLimitConfig REFRESH_LIMIT = new RateLimitConfig("/api/auth/refresh", 10, 1);
     private static final RateLimitConfig CHANGE_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/change-password", 3, 1);
+    private static final RateLimitConfig FORGOT_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/forgot-password", 2, 60);
+    private static final RateLimitConfig RESET_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/reset-password", 5, 60);
 
     private Bucket createNewBucket(RateLimitConfig config) {
         Refill refill = Refill.intervally(config.capacity, Duration.ofMinutes(config.durationMinutes));
@@ -131,6 +133,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // verifica rate limit para change-password / check rate limit for change-password
         if (!rateLimited && path.startsWith(CHANGE_PASSWORD_LIMIT.endpoint())) {
             rateLimited = checkRateLimit(request, response, path, CHANGE_PASSWORD_LIMIT);
+        }
+
+        // verifica rate limit para forgot-password / check rate limit for forgot-password
+        if (!rateLimited && path.startsWith(FORGOT_PASSWORD_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, FORGOT_PASSWORD_LIMIT);
+        }
+
+        // verifica rate limit para reset-password / check rate limit for reset-password
+        if (!rateLimited && path.startsWith(RESET_PASSWORD_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, RESET_PASSWORD_LIMIT);
         }
 
         if (!rateLimited) {
