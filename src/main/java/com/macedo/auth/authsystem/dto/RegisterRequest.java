@@ -1,5 +1,6 @@
 package com.macedo.auth.authsystem.dto;
 
+import com.macedo.auth.authsystem.validation.ValidPassword;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -36,14 +37,14 @@ public class RegisterRequest {
     private String email;
 
     @Schema(
-            description = "Senha para acesso ao sistema. Será armazenada de forma criptografada",
+            description = "Senha para acesso ao sistema. Será armazenada de forma criptografada. Mínimo 12 caracteres, com maiúscula, minúscula, número e caractere especial.",
             example = "MinhaSenha@123",
             required = true,
             format = "password",
-            minLength = 8,
+            minLength = 12,
             maxLength = 100
     )
     @NotBlank(message = "Senha é obrigatória")
-    @Size(min = 8, max = 100, message = "Senha deve ter entre 8 e 100 caracteres")
+    @ValidPassword
     private String password;
 }

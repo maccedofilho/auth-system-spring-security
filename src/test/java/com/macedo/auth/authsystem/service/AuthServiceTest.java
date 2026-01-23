@@ -48,13 +48,17 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private LoginAttemptService loginAttemptService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         when(props.getAccessTokenExpirationMs()).thenReturn(900000L);
         when(props.getRefreshTokenExpirationMs()).thenReturn(86400000L);
-        authService = new AuthService(users, roles, encoder, jwt, props, refreshTokenService);
+        when(loginAttemptService.isLocked(anyString())).thenReturn(false);
+        authService = new AuthService(users, roles, encoder, jwt, props, refreshTokenService, loginAttemptService);
     }
 
     @Test

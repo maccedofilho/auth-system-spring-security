@@ -1,8 +1,8 @@
 package com.macedo.auth.authsystem.dto;
 
+import com.macedo.auth.authsystem.validation.ValidPassword;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,14 +23,14 @@ public class ResetPasswordRequest {
     private String token;
 
     @Schema(
-            description = "Nova senha. Deve ter entre 8 e 100 caracteres",
+            description = "Nova senha. Mínimo 12 caracteres, com maiúscula, minúscula, número e caractere especial.",
             example = "NovaSenha@456",
             required = true,
             format = "password",
-            minLength = 8,
+            minLength = 12,
             maxLength = 100
     )
     @NotBlank(message = "Nova senha é obrigatória")
-    @Size(min = 8, max = 100, message = "Senha deve ter entre 8 e 100 caracteres")
+    @ValidPassword
     private String newPassword;
 }

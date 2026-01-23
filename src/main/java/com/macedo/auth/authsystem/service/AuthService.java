@@ -3,6 +3,7 @@ package com.macedo.auth.authsystem.service;
 import com.macedo.auth.authsystem.config.JwtProperties;
 import com.macedo.auth.authsystem.dto.*;
 import com.macedo.auth.authsystem.entity.*;
+import com.macedo.auth.authsystem.exception.AccountLockedException;
 import com.macedo.auth.authsystem.exception.EmailAlreadyExistsException;
 import com.macedo.auth.authsystem.exception.InvalidCredentialsException;
 import com.macedo.auth.authsystem.repository.RoleRepository;
@@ -24,16 +25,19 @@ public class AuthService {
     private final JwtTokenProvider jwt;
     private final JwtProperties props;
     private final RefreshTokenService refreshTokenService;
+    private final LoginAttemptService loginAttemptService;
 
     public AuthService(UserRepository users, RoleRepository roles,
                        PasswordEncoder encoder, JwtTokenProvider jwt, JwtProperties props,
-                       RefreshTokenService refreshTokenService) {
+                       RefreshTokenService refreshTokenService,
+                       LoginAttemptService loginAttemptService) {
         this.users = users;
         this.roles = roles;
         this.encoder = encoder;
         this.jwt = jwt;
         this.props = props;
         this.refreshTokenService = refreshTokenService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @Transactional
@@ -57,12 +61,23 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest req) {
+        if (loginAttemptService.isLocked(req.getEmail())) {
+            long remaining = loginAttemptService.getLockoutTimeRemaining(req.getEmail());
+            throw new AccountLockedException("Account is temporarily locked due to multiple failed login attempts", remaining);
+        }
+
         User u = users.findByEmail(req.getEmail())
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid credentials"));
+                .orElseThrow(() -> {
+                    loginAttemptService.loginFailed(req.getEmail());
+                    return new InvalidCredentialsException("Invalid credentials");
+                });
 
         if (!encoder.matches(req.getPassword(), u.getPassword())) {
+            loginAttemptService.loginFailed(req.getEmail());
             throw new InvalidCredentialsException("Invalid credentials");
         }
+
+        loginAttemptService.loginSucceeded(req.getEmail());
 
         String access = jwt.generateAccessToken(u.getEmail());
         String refreshToken = refreshTokenService.issue(u);
