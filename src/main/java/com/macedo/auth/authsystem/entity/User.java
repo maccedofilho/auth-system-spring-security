@@ -59,6 +59,10 @@ public class User {
 
     private Instant updatedAt;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer failedAttempts = 0;
+
     @PreUpdate
     void onUpdate() {
         this.updatedAt = Instant.now();

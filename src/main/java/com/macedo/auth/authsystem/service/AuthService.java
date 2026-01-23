@@ -109,11 +109,16 @@ public class AuthService {
         refreshTokenService.revoke(req.getRefreshToken());
     }
 
+    public void logoutWithToken(String accessToken) {
+        jwt.blacklistToken(accessToken);
+    }
+
     @Transactional
     public void logoutAll(String email) {
         User user = users.findByEmail(email)
                 .orElseThrow(() -> new InvalidCredentialsException("User not found"));
         refreshTokenService.revokeAll(user);
+        jwt.blacklistByUser(email);
     }
 
     @Transactional

@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -180,23 +181,23 @@ public class AuthController {
     @Operation(
             summary = "Logout do usuário",
             description = """
-                    Revoga o refresh token, efetuando o logout do usuário.
+                    Revoga o refresh token e adiciona o access token à blacklist.
 
                     **Comportamento:**
                     * O refresh token fornecido é marcado como revogado no banco de dados
+                    * O access token atual é adicionado à blacklist (não pode mais ser usado)
                     * Após revogado, o token não pode mais ser usado para obter novos access tokens
-                    * Access tokens ainda válidos continuarão funcionando até sua expiração natural (15 min)
+                    * Access token é invalidado imediatamente via blacklist
 
                     **Nota sobre Segurança:**
-                    * O access token de curta duração (15 min) ainda funcionará após o logout
-                    * Para invalidar imediatamente todos os tokens, seria necessário implementar um blacklist
-                    * Esta abordagem é simples e suficiente para a maioria dos casos de uso
+                    * O access token é invalidado imediatamente via JWT blacklist
+                    * Tokens na blacklist expiram após 15 minutos
                     """
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "204",
-                    description = "Logout realizado com sucesso - refresh token revogado"
+                    description = "Logout realizado com sucesso - tokens revogados"
             ),
             @ApiResponse(
                     responseCode = "400",
@@ -209,8 +210,15 @@ public class AuthController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest req) {
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest req, HttpServletRequest request) {
         auth.logout(req);
+
+        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String accessToken = authHeader.substring(7);
+            auth.logoutWithToken(accessToken);
+        }
+
         return ResponseEntity.noContent().build();
     }
 
@@ -222,9 +230,9 @@ public class AuthController {
 
                     **Comportamento:**
                     * Todos os refresh tokens do usuário são deletados do banco de dados
+                    * O access token atual é adicionado à blacklist
                     * Após o logout global, nenhum dispositivo pode obter novos access tokens
-                    * Access tokens ainda válidos continuarão funcionando até expirarem (15 min)
-                    * Operação é idempotente - chamadas repetidas não geram erro
+                    * Access tokens antigos continuarão válidos até expirarem (ou serem invalidados via logout individual)
 
                     **Casos de Uso:**
                     * Suspeita de conta comprometida
@@ -244,8 +252,15 @@ public class AuthController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    public ResponseEntity<Void> logoutAll(Authentication authentication) {
+    public ResponseEntity<Void> logoutAll(Authentication authentication, HttpServletRequest request) {
         auth.logoutAll(authentication.getName());
+
+        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String accessToken = authHeader.substring(7);
+            auth.logoutWithToken(accessToken);
+        }
+
         return ResponseEntity.noContent().build();
     }
 

@@ -53,6 +53,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final RateLimitConfig CHANGE_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/change-password", 3, 1);
     private static final RateLimitConfig FORGOT_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/forgot-password", 2, 60);
     private static final RateLimitConfig RESET_PASSWORD_LIMIT = new RateLimitConfig("/api/auth/reset-password", 5, 60);
+    private static final RateLimitConfig ADMIN_LIST_LIMIT = new RateLimitConfig("/api/admin/users", 30, 1);
+    private static final RateLimitConfig ADMIN_DETAIL_LIMIT = new RateLimitConfig("/api/admin/users/", 50, 1);
+    private static final RateLimitConfig ADMIN_DEFAULT_LIMIT = new RateLimitConfig("/api/admin/", 20, 1);
 
     private Bucket createNewBucket(RateLimitConfig config) {
         Refill refill = Refill.intervally(config.capacity, Duration.ofMinutes(config.durationMinutes));
@@ -143,6 +146,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
         // verifica rate limit para reset-password / check rate limit for reset-password
         if (!rateLimited && path.startsWith(RESET_PASSWORD_LIMIT.endpoint())) {
             rateLimited = checkRateLimit(request, response, path, RESET_PASSWORD_LIMIT);
+        }
+
+        // verifica rate limit para admin users list / check rate limit for admin users list
+        if (!rateLimited && path.startsWith(ADMIN_LIST_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, ADMIN_LIST_LIMIT);
+        }
+
+        // verifica rate limit para admin user detail / check rate limit for admin user detail
+        if (!rateLimited && path.contains(ADMIN_DETAIL_LIMIT.endpoint()) && path.matches("/api/admin/users/\\d+")) {
+            rateLimited = checkRateLimit(request, response, path, ADMIN_DETAIL_LIMIT);
+        }
+
+        // verifica rate limit para outros endpoints admin / check rate limit for other admin endpoints
+        if (!rateLimited && path.startsWith(ADMIN_DEFAULT_LIMIT.endpoint())) {
+            rateLimited = checkRateLimit(request, response, path, ADMIN_DEFAULT_LIMIT);
         }
 
         if (!rateLimited) {
