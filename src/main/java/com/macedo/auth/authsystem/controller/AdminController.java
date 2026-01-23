@@ -1,6 +1,7 @@
 package com.macedo.auth.authsystem.controller;
 
 import com.macedo.auth.authsystem.dto.ErrorResponse;
+import com.macedo.auth.authsystem.dto.PagedResponse;
 import com.macedo.auth.authsystem.dto.UserResponse;
 import com.macedo.auth.authsystem.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,8 +16,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -33,32 +32,34 @@ public class AdminController {
 
     @GetMapping("/users")
     @Operation(
-            summary = "Listar todos os usuários",
+            summary = "Listar usuários com paginação e busca",
             description = """
-                    Retorna uma lista de todos os usuários cadastrados no sistema.
+                    Retorna lista paginada de usuários com suporte a busca e ordenação.
 
-                    **Informações retornadas:**
-                    * ID, nome e email
-                    * Roles (papeis) atribuídos
-                    * Status da conta (ativo/inativo)
-                    * Data de criação
+                    **Parâmetros:**
+                    * `page`: Número da página (0-indexed, default=0)
+                    * `size`: Itens por página (default=20, max=100)
+                    * `sort`: Ordenação (ex: createdAt,desc ou name,asc)
+                    * `q`: Busca por nome ou email
 
-                    **Nota:** Informações sensíveis como senhas nunca são retornadas.
+                    **Resposta:**
+                    * `items`: Lista de usuários da página atual
+                    * `page`: Metadados de paginação (number, size, totalItems, totalPages)
 
-                    **Permissão:**
-                    * Requer ROLE_ADMIN
-                    * Usuários com ROLE_USER receberão HTTP 403
+                    **Ordenação padrão:** createdAt,desc (mais recentes primeiro)
+
+                    **Permissão:** Requer ROLE_ADMIN
                     """
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
                     description = "Lista de usuários retornada com sucesso",
-                    content = @Content(schema = @Schema(implementation = UserResponse.class))
+                    content = @Content(schema = @Schema(implementation = PagedResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
-                    description = "Não autenticado - Token ausente ou inválido",
+                    description = "Não autenticado",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
@@ -67,8 +68,17 @@ public class AdminController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    public ResponseEntity<List<UserResponse>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    public ResponseEntity<PagedResponse<UserResponse>> getUsers(
+            @Parameter(description = "Número da página (0-indexed)", example = "0")
+            @RequestParam(required = false) Integer page,
+            @Parameter(description = "Itens por página (max=100)", example = "20")
+            @RequestParam(required = false) Integer size,
+            @Parameter(description = "Ordenação (ex: createdAt,desc ou name,asc)", example = "createdAt,desc")
+            @RequestParam(required = false) String[] sort,
+            @Parameter(description = "Busca por nome ou email", example = "joao")
+            @RequestParam(required = false, name = "q") String query
+    ) {
+        return ResponseEntity.ok(userService.searchUsers(query, page, size, sort));
     }
 
     @GetMapping("/users/{id}")
