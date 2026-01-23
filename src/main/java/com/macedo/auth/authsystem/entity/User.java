@@ -47,6 +47,12 @@ public class User {
     )
     private Set<Role> roles;
 
+    @Column(length = 500)
+    private String avatarUrl;
+
+    @Column(length = 20)
+    private String phoneNumber;
+
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

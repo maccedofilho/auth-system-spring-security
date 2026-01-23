@@ -2,6 +2,8 @@ package com.macedo.auth.authsystem.controller;
 
 import com.macedo.auth.authsystem.dto.ErrorResponse;
 import com.macedo.auth.authsystem.dto.SessionResponse;
+import com.macedo.auth.authsystem.dto.UpdateUserRequest;
+import com.macedo.auth.authsystem.dto.UserProfileResponse;
 import com.macedo.auth.authsystem.service.RefreshTokenService;
 import com.macedo.auth.authsystem.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,6 +18,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +80,52 @@ public class UserController {
                 "user", auth.getName(),
                 "authorities", auth.getAuthorities()
         );
+    }
+
+    @PatchMapping("/me")
+    @Operation(
+            summary = "Atualizar perfil do usuário autenticado",
+            description = """
+                    Atualiza os campos permitidos do perfil do usuário autenticado.
+
+                    **Campos Atualizáveis:**
+                    * `name`: Nome completo (2-120 caracteres)
+                    * `avatarUrl`: URL da foto de perfil (opcional)
+                    * `phoneNumber`: Número de telefone (opcional)
+
+                    **Campos Protegidos (não alteráveis):**
+                    * `email`: Não pode ser alterado
+                    * `roles`: Não pode ser alterado
+                    * `enabled`: Não pode ser alterado
+                    * `password`: Use /api/auth/change-password
+
+                    **Comportamento:**
+                    * Apenas campos enviados são atualizados (PATCH parcial)
+                    * Retorna dados atualizados em caso de sucesso
+                    """
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Perfil atualizado com sucesso",
+                    content = @Content(schema = @Schema(implementation = UserProfileResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Dados de entrada inválidos",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Não autenticado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    public UserProfileResponse updateProfile(
+            @Valid @RequestBody UpdateUserRequest request,
+            Authentication auth
+    ) {
+        return userService.updateProfile(auth.getName(), request);
     }
 
     @GetMapping("/sessions")
